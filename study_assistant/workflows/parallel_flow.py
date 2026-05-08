@@ -1,4 +1,5 @@
 import asyncio
+from google.adk.agents.llm_agent import Agent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
@@ -9,59 +10,50 @@ from study_assistant.agents import (
     create_quiz_agent,
 )
 
+APP_NAME = "study_assistant"
+USER_ID = "user"
 
-async def _run_agent(runner: Runner, session_service: InMemorySessionService, user_id: str, message: str) -> str:
-    session = await session_service.create_session(
-        app_name="study_assistant", user_id=user_id, state={}
+
+async def _ask(agent: Agent, prompt: str, session_service: InMemorySessionService) -> str:
+    runner = Runner(
+        agent=agent,
+        app_name=APP_NAME,
+        session_service=session_service,
     )
-    content = types.Content(role="user", parts=[types.Part(text=message)])
-    response_text = ""
+    session = await session_service.create_session(
+        app_name=APP_NAME,
+        user_id=USER_ID,
+        state={},
+    )
+    message = types.Content(role="user", parts=[types.Part(text=prompt)])
+    text = ""
     async for event in runner.run_async(
-        user_id=user_id,
+        user_id=USER_ID,
         session_id=session.id,
-        new_message=content,
+        new_message=message,
     ):
         if event.is_final_response() and event.content and event.content.parts:
-            response_text = event.content.parts[0].text
-    return response_text
+            text = event.content.parts[0].text
+    return text
 
 
-async def run_parallel(topic: str, research_content: str) -> dict:
+async def run_parallel(topic: str, research_content: str) -> dict[str, str]:
     session_service = InMemorySessionService()
 
-    flashcard_runner = Runner(
-        agent=create_flashcard_agent(),
-        app_name="study_assistant",
-        session_service=session_service,
-    )
-    mindmap_runner = Runner(
-        agent=create_mindmap_agent(),
-        app_name="study_assistant",
-        session_service=session_service,
-    )
-    quiz_runner = Runner(
-        agent=create_quiz_agent(),
-        app_name="study_assistant",
-        session_service=session_service,
-    )
-
-    flashcard_task = _run_agent(
-        flashcard_runner,
-        session_service,
-        "user",
+    flashcard_task = _ask(
+        create_flashcard_agent(),
         f"Create flashcards for this content:\n\n{research_content}",
-    )
-    mindmap_task = _run_agent(
-        mindmap_runner,
         session_service,
-        "user",
+    )
+    mindmap_task = _ask(
+        create_mindmap_agent(),
         f"Build a mind map for the topic: {topic}\n\nContent:\n{research_content}",
-    )
-    quiz_task = _run_agent(
-        quiz_runner,
         session_service,
-        "user",
+    )
+    quiz_task = _ask(
+        create_quiz_agent(),
         f"Generate a quiz from this content:\n\n{research_content}",
+        session_service,
     )
 
     flashcards, mindmap, quiz = await asyncio.gather(

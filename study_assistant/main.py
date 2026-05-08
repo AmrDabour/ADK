@@ -26,13 +26,10 @@ async def main():
         return
 
     if workflow in {"2", "parallel", "p"}:
-        research_content = input("Enter source content for parallel flow (Enter = topic): ").strip()
-        if not research_content:
-            research_content = topic
         print(f"\nStarting parallel workflow for: {topic}")
         parallel_results = await run_parallel(
             topic=topic,
-            research_content=research_content,
+            research_content=topic,
         )
         print_section("FLASHCARDS", parallel_results.get("flashcards", ""))
         print_section("MIND MAP", parallel_results.get("mindmap", ""))
